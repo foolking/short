@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>網路連結管理系統</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <script type="text/javascript" src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; color: #333; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .container { max-width: 800px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+        header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        header h1 { margin: 0; color: var(--primary); }
+        .footer { text-align: center; margin-top: 40px; font-size: 0.8rem; color: #aaa; }
+        .fam-text { color: #c0392b; font-style: italic; font-weight: bold; }
+        input[type="password"], input[type="text"], input[type="url"] { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: 0.2s; }
+        button:hover { background: var(--accent); }
+        button.secondary { background: #95a5a6; }
+        button.danger { background: var(--danger); }
+        button.danger:hover { background: #c0392b; }
+        button.small-btn { padding: 5px 10px; font-size: 0.9rem; margin-left: 10px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 10px; background: #eee; border: none; border-radius: 6px; cursor: pointer; color: #555; }
+        .tab-btn.active { background: var(--primary); color: white; font-weight: bold; }
+        .search-bar { display: flex; gap: 8px; margin-bottom: 15px; align-items: center; }
+        #search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; margin: 0; }
+        .search-btn { height: 42px; padding: 0 20px; display: flex; align-items: center; }
+        #links-container { max-height: 500px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 0 10px; }
+        .link-item { border-bottom: 1px solid #eee; padding: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+        .link-info { flex: 1; min-width: 0; }
+        
+        /* ★★★ 新增：標題可編輯樣式 ★★★ */
+        .link-title { font-weight: bold; font-size: 1.1rem; color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .link-title:hover { color: var(--accent); }
+        .link-title:hover::after { content: '✎'; font-size: 0.8rem; opacity: 0.5; }
+        .edit-input { font-size: 1.1rem; padding: 4px; width: 80%; border: 1px solid var(--accent); border-radius: 4px; }
+
+        .link-url { font-size: 0.9rem; color: #7f8c8d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .link-meta { font-size: 0.8rem; color: #bdc3c7; margin-top: 4px; }
+        .link-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn-icon { padding: 6px 12px; font-size: 0.9rem; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center; }
+        .qr-controls { margin: 15px 0; text-align: left; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: block; font-size: 0.9rem; margin-bottom: 5px; color: #666; }
+    </style>
+</head>
+<body>
+    <div id="redirect-view" class="container hidden" style="text-align: center;">
+        <div class="loader"></div><p>正在前往目的地...</p>
+    </div>
+    <div id="admin-view" class="hidden">
+        <div class="container">
+            <header><h1>Link Manager</h1><p>網址管理系統</p></header>
+            <div id="dashboard-panel">
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('create')">➕ 新增連結</button>
+                    <button class="tab-btn" onclick="switchTab('list')">📋 所有列表</button>
+                </div>
+                <div id="tab-create">
+                    <div class="control-group"><label>原始長網址 (Original URL)</label><input type="url" id="new-url" placeholder="https://..." onchange="autoFetchTitle()"></div>
+                    <div class="control-group"><label>標題 (Title)</label><input type="text" id="new-title" placeholder="網頁標題"></div>
+                    <div class="control-group"><label>短代碼 (Short ID)</label><input type="text" id="new-shortid" placeholder="例如: my-ai-work"></div>
+                    <div class="control-group"><label>備註 (Note)</label><input type="text" id="new-note" placeholder="例如: 演講用"></div>
+                    <br><button onclick="createLink()" style="width:100%">建立短網址</button><div id="create-msg" style="margin-top:10px; text-align:center;"></div>
+                </div>
+                <div id="tab-list" class="hidden">
+                    <div class="search-bar">
+                        <input type="text" id="search-input" placeholder="🔍 搜尋標題、備註..." onkeyup="handleEnter(event)">
+                        <button class="search-btn" onclick="filterLinks()">搜尋</button>
+                        <button class="search-btn secondary" onclick="loadLinks(true)">🔄 重整</button>
+                    </div>
+                    <div id="links-container"><div class="loader"></div></div>
+                </div>
+            </div>
+            <div class="footer">by <span class="fam-text">Famidoc Chang</span></div>
+        </div>
+    </div>
+    <div id="qr-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>QR Code 設定</h3>
+            <div id="qr-canvas-container" style="margin: 10px auto;"></div>
+            <div class="qr-controls">
+                <div class="control-group"><label>顏色 (Color)</label><input type="color" id="qr-color" value="#2c3e50" onchange="updateQR()"></div>
+                <div class="control-group"><label>中間 Logo (上傳圖片)</label><input type="file" id="qr-logo-file" accept="image/*" onchange="handleLogoUpload(this)"></div>
+            </div>
+            <button onclick="downloadQR()">下載圖片</button><button class="secondary" onclick="closeQRModal()">關閉</button>
+        </div>
+    </div>
+    <script>
+        // ==========================================
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzMPzLB_I97-E5H8Qv6WnIkb5vKF5k_41yoSeIkepI50gqbQ69u2roq7jyzx51x4OFr/exec";
+        // ==========================================
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+        let qrCodeObj = null; let currentQrUrl = "";
+        let allLinksData = [];
+
+        if (id) {
+            document.getElementById('redirect-view').classList.remove('hidden');
+            fetch(`${GAS_URL}?action=getLink&id=${id}`).then(r => r.json()).then(data => {
+                if(data.status === "success") {
+                    fetch(`${GAS_URL}?action=addClick&id=${id}`, { method: 'POST' });
+                    window.location.replace(data.url);
+                } else { document.getElementById('redirect-view').innerHTML = `<h3 style="color:red">找不到連結</h3>`; }
+            });
+        } else {
+            document.getElementById('admin-view').classList.remove('hidden');
+            initQRCode();
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#tab-create, #tab-list').forEach(d => d.classList.add('hidden'));
+            if(tabName === 'create') {
+                document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+                document.getElementById('tab-create').classList.remove('hidden');
+            } else {
+                document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+                document.getElementById('tab-list').classList.remove('hidden');
+                loadLinks(); 
+            }
+        }
+        function autoFetchTitle() {
+            const url = document.getElementById('new-url').value;
+            if(url && url.startsWith('http')) document.getElementById('new-title').placeholder = "留空則系統自動抓取";
+        }
+        function createLink() {
+            const btn = document.querySelector('button[onclick="createLink()"]');
+            const msg = document.getElementById('create-msg');
+            const payload = {
+                action: "create",
+                url: document.getElementById('new-url').value,
+                title: document.getElementById('new-title').value,
+                shortId: document.getElementById('new-shortid').value,
+                note: document.getElementById('new-note').value
+            };
+            if(!payload.url) { alert("請輸入網址"); return; }
+            btn.disabled = true; btn.innerText = "處理中..."; msg.innerText = "";
+            fetch(GAS_URL, { method: "POST", body: JSON.stringify(payload) }).then(r => r.json()).then(data => {
+                btn.disabled = false; btn.innerText = "建立短網址";
+                if(data.status === "success") {
+                    const fullShortUrl = `https://famidoc.github.io/?id=${data.shortId}`;
+                    msg.innerHTML = `<div style="color:green; margin-bottom:5px;">成功！</div><div style="font-weight:bold; font-size:1.1rem; margin-bottom:5px;">${fullShortUrl}</div><button class="secondary small-btn" onclick="copyToClip('${fullShortUrl}')">複製連結</button>`;
+                    document.getElementById('new-url').value = ""; document.getElementById('new-title').value = ""; document.getElementById('new-shortid').value = "";
+                } else { msg.innerHTML = `<span style="color:red">失敗: ${data.message}</span>`; }
+            });
+        }
+        function loadLinks(forceRefresh = false) {
+            const container = document.getElementById('links-container');
+            container.innerHTML = '<div class="loader"></div>';
+            fetch(`${GAS_URL}?action=getAll`).then(r => r.json()).then(resp => {
+                if(resp.status !== "success") { container.innerHTML = "載入失敗"; return; }
+                allLinksData = resp.data; filterLinks();
+            });
+        }
+        function handleEnter(event) { if (event.key === "Enter") filterLinks(); }
+        
+        function renderLinks(data) {
+            const container = document.getElementById('links-container');
+            if(data.length === 0) { container.innerHTML = '<div style="text-align:center; color:#aaa; padding:20px;">沒有找到相符的資料</div>'; return; }
+            let html = "";
+            data.forEach(item => {
+                const fullShortUrl = `https://famidoc.github.io/?id=${item.shortId}`;
+                // ★★★ 修改：標題加入 onclick 事件 ★★★
+                html += `
+                <div class="link-item">
+                    <div class="link-info">
+                        <div class="link-title" onclick="editTitle(this, '${item.shortId}')" title="點擊修改標題">${item.title || '(無標題)'} <small style="color:#aaa; font-weight:normal">(${item.clicks} hits)</small></div>
+                        <div class="link-url"><a href="${fullShortUrl}" target="_blank">${fullShortUrl}</a></div>
+                        <div class="link-meta">ID: ${item.shortId} | ${new Date(item.createdDate).toLocaleDateString()} | ${item.note}</div>
+                    </div>
+                    <div class="link-actions">
+                        <button class="btn-icon" onclick="copyToClip('${fullShortUrl}')">複製</button>
+                        <button class="btn-icon secondary" onclick="openQR('${fullShortUrl}')">QR</button>
+                        <button class="btn-icon danger" onclick="deleteLinkItem('${item.shortId}')">🗑️</button>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // ★★★ 新增：標題編輯邏輯 ★★★
+        function editTitle(element, id) {
+            const currentTitle = element.childNodes[0].nodeValue.trim(); // 只抓文字部分，不抓 hits
+            const originalContent = element.innerHTML;
+            
+            // 替換成輸入框
+            element.innerHTML = `<input type="text" class="edit-input" value="${currentTitle}" onblur="saveTitle(this, '${id}', '${currentTitle}')" onkeydown="handleEditEnter(event, this)">`;
+            const input = element.querySelector('input');
+            input.focus(); // 自動聚焦
+            
+            // 暫時移除 onclick，避免重複觸發
+            element.onclick = null;
+        }
+
+        function handleEditEnter(event, input) {
+            if (event.key === "Enter") {
+                input.blur(); // 觸發 onblur 來儲存
+            }
+        }
+
+        function saveTitle(input, id, oldTitle) {
+            const newTitle = input.value.trim();
+            const parent = input.parentElement;
+
+            if (newTitle === oldTitle || newTitle === "") {
+                // 如果沒改或留空，還原回來 (注意要把 hits 的小字加回來)
+                // 這裡簡單重繪整個列表比較保險，確保資料顯示正確
+                filterLinks(); 
+                return;
+            }
+
+            // 顯示 Loading 狀態
+            parent.innerHTML = `更新中...`;
+
+            fetch(GAS_URL, {
+                method: "POST",
+                body: JSON.stringify({ action: "updateTitle", id: id, newTitle: newTitle })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if(data.status === "success") {
+                    // 更新成功，更新本地資料並重繪
+                    const target = allLinksData.find(item => item.shortId == id);
+                    if(target) target.title = newTitle;
+                    filterLinks();
+                } else {
+                    alert("更新失敗: " + data.message);
+                    filterLinks(); // 還原
+                }
+            });
+        }
+
+        function filterLinks() {
+            const term = document.getElementById('search-input').value.toLowerCase().trim();
+            if (allLinksData.length === 0) return;
+            if (!term) { renderLinks(allLinksData); return; }
+            const filtered = allLinksData.filter(item => {
+                const title = String(item.title || "").toLowerCase();
+                const note = String(item.note || "").toLowerCase();
+                const shortId = String(item.shortId || "").toLowerCase();
+                const originalUrl = String(item.originalUrl || "").toLowerCase();
+                return title.includes(term) || note.includes(term) || shortId.includes(term) || originalUrl.includes(term);
+            });
+            renderLinks(filtered);
+        }
+        function deleteLinkItem(id) {
+            if(!confirm("確定要刪除這個短網址嗎？(此動作無法復原)")) return;
+            const container = document.getElementById('links-container');
+            container.innerHTML = '<div class="loader"></div>';
+            fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", id: id }) })
+            .then(r => r.json()).then(data => {
+                if(data.status === "success") loadLinks(true);
+                else { alert("刪除失敗: " + data.message); loadLinks(true); }
+            });
+        }
+        function copyToClip(text) { navigator.clipboard.writeText(text).then(() => alert("已複製！")); }
+        function initQRCode() { qrCodeObj = new QRCodeStyling({ width: 250, height: 250, type: "svg", data: "https://famidoc.github.io", image: "", dotsOptions: { color: "#2c3e50", type: "rounded" }, backgroundOptions: { color: "#ffffff" }, imageOptions: { crossOrigin: "anonymous", margin: 10 } }); }
+        function openQR(url) { currentQrUrl = url; document.getElementById('qr-modal').classList.remove('hidden'); updateQR(); }
+        function closeQRModal() { document.getElementById('qr-modal').classList.add('hidden'); }
+        function updateQR() { if(!qrCodeObj) return; const color = document.getElementById('qr-color').value; qrCodeObj.update({ data: currentQrUrl, dotsOptions: { color: color } }); document.getElementById('qr-canvas-container').innerHTML = ""; qrCodeObj.append(document.getElementById('qr-canvas-container')); }
+        function handleLogoUpload(input) { if (input.files && input.files[0]) { const reader = new FileReader(); reader.onload = function (e) { qrCodeObj.update({ image: e.target.result }); }; reader.readAsDataURL(input.files[0]); } }
+        function downloadQR() { qrCodeObj.download({ name: "famidoc-qr", extension: "png" }); }
+    </script>
+</body>
+</html>
